@@ -87,8 +87,8 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
   }
 
   const handleDeleteRoom = async (roomId, creatorId) => {
-    if (creatorId !== user.id) {
-      alert('본인이 생성한 방만 삭제할 수 있습니다.')
+    if (!user.isAdmin && creatorId !== user.id) {
+      alert('본인이 생성한 방만 삭제할 수 있습니다. (관리자는 모든 방 삭제 가능)')
       return
     }
     if (!window.confirm('정말 이 채팅방을 삭제하시겠습니까?')) return
@@ -239,7 +239,7 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
                   key={room.id}
                   button
                   onClick={() => {
-                    if (room.is_private) {
+                    if (room.is_private && !user.isAdmin) {
                       const code = window.prompt('이 비밀방의 초대코드를 입력하세요.')
                       if (!code) return
                       if (code.trim().toUpperCase() !== (room.invite_code || '').toUpperCase()) {
@@ -274,7 +274,7 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
                       </Box>
                     }
                   />
-                  {room.creator_id === user.id && (
+                  {(room.creator_id === user.id || user.isAdmin) && (
                     <ListItemSecondaryAction>
                       <IconButton
                         edge="end"

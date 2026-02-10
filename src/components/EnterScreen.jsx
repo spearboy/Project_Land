@@ -58,6 +58,7 @@ const EnterScreen = ({ onAuthSuccess }) => {
         id: data.id,
         userId: data.user_id,
         nickname: data.nickname,
+        isAdmin: Boolean(data.is_admin),
       })
     } catch (err) {
       console.error('로그인 오류:', err)
@@ -111,6 +112,7 @@ const EnterScreen = ({ onAuthSuccess }) => {
           user_id: userId.trim(),
           password, // 데모용: 실제 서비스에서는 반드시 해시해야 합니다.
           nickname: nickname.trim(),
+          is_admin: false,
         })
         .select()
         .single()
@@ -126,6 +128,7 @@ const EnterScreen = ({ onAuthSuccess }) => {
           id: data.id,
           userId: data.user_id,
           nickname: data.nickname,
+          isAdmin: Boolean(data.is_admin),
         })
       }
     } finally {

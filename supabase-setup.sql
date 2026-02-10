@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   user_id TEXT NOT NULL UNIQUE, -- 로그인용 아이디
   password TEXT NOT NULL,       -- 데모용: 실제 서비스에서는 반드시 해시 사용
   nickname TEXT NOT NULL UNIQUE, -- 채팅에 보여질 닉네임 (중복 불가)
+  is_admin BOOLEAN NOT NULL DEFAULT FALSE, -- 관리자 여부
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
