@@ -7,7 +7,7 @@ import RoomListScreen from './components/RoomListScreen'
 import { supabase } from './lib/supabase'
 import { parseMentions } from './utils/mentionParser'
 
-const APP_VERSION = 'v0.0.5'
+const APP_VERSION = 'v0.0.8'
 
 const darkTheme = createTheme({
   palette: {
@@ -58,6 +58,45 @@ const AppContent = () => {
   const channelRef = useRef(null)
   const allRoomsChannelRef = useRef(null) // 모든 방의 메시지를 구독
 
+  // 버전 체크 및 강제 로그아웃 함수
+  const checkVersionAndLogout = () => {
+    try {
+      // 채널 구독 해제 시도
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+      if (allRoomsChannelRef.current) {
+        supabase.removeChannel(allRoomsChannelRef.current)
+        allRoomsChannelRef.current = null
+      }
+    } catch (logoutError) {
+      console.error('버전 변경으로 인한 로그아웃 처리 중 오류:', logoutError)
+    } finally {
+      // 문제가 있어도 로컬 스토리지 강제 삭제 후 로그인 화면으로
+      localStorage.removeItem('chatUser')
+      localStorage.removeItem('appVersion')
+      setEntered(false)
+      setUser(null)
+      setCurrentRoom(null)
+      setMessages([])
+      setMessage('')
+      setMicOn(false)
+      setNotificationSettings({})
+      setParticipants([])
+    }
+  }
+
+  // 버전 체크 함수
+  const checkVersion = () => {
+    const savedVersion = localStorage.getItem('appVersion')
+    if (!savedVersion || savedVersion !== APP_VERSION) {
+      checkVersionAndLogout()
+      return false
+    }
+    return true
+  }
+
   // 앱 시작 시 로컬 스토리지에서 로그인 정보 & 버전 확인
   useEffect(() => {
     try {
@@ -74,31 +113,7 @@ const AppContent = () => {
 
       // 버전이 없거나 현재 버전과 다르면 강제 로그아웃 처리
       if (!savedVersion || savedVersion !== APP_VERSION) {
-        try {
-          // 채널 구독 해제 시도
-          if (channelRef.current) {
-            supabase.removeChannel(channelRef.current)
-            channelRef.current = null
-          }
-          if (allRoomsChannelRef.current) {
-            supabase.removeChannel(allRoomsChannelRef.current)
-            allRoomsChannelRef.current = null
-          }
-        } catch (logoutError) {
-          console.error('버전 변경으로 인한 로그아웃 처리 중 오류:', logoutError)
-        } finally {
-          // 문제가 있어도 로컬 스토리지 강제 삭제 후 로그인 화면으로
-          localStorage.removeItem('chatUser')
-          localStorage.removeItem('appVersion')
-          setEntered(false)
-          setUser(null)
-          setCurrentRoom(null)
-          setMessages([])
-          setMessage('')
-          setMicOn(false)
-          setNotificationSettings({})
-          setParticipants([])
-        }
+        checkVersionAndLogout()
         return
       }
 
@@ -305,6 +320,11 @@ const AppContent = () => {
   const handleSelectRoom = async (room) => {
     if (!user) return
 
+    // 버전 체크
+    if (!checkVersion()) {
+      return
+    }
+
     // 참가자 정보 upsert (이미 참가 중이면 유지)
     const role = room.creator_id === user.id ? 'creator' : 'member'
 
@@ -333,6 +353,11 @@ const AppContent = () => {
     if (!message.trim()) return
     if (!user) return
     if (!currentRoom) return
+
+    // 버전 체크
+    if (!checkVersion()) {
+      return
+    }
 
     // 방이 아직 존재하는지 확인
     const { data: roomData, error: roomError } = await supabase
