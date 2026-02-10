@@ -50,6 +50,21 @@ const App = () => {
   const [micOn, setMicOn] = useState(false)
   const channelRef = useRef(null)
 
+  // 앱 시작 시 로컬 스토리지에서 로그인 정보 로드
+  useEffect(() => {
+    const savedUser = localStorage.getItem('chatUser')
+    if (savedUser) {
+      try {
+        const userData = JSON.parse(savedUser)
+        setUser(userData)
+        setEntered(true)
+      } catch (err) {
+        console.error('저장된 로그인 정보 로드 오류:', err)
+        localStorage.removeItem('chatUser')
+      }
+    }
+  }, [])
+
   // 방 입장 시 기존 메시지 로드 및 실시간 구독 설정
   useEffect(() => {
     if (!entered || !currentRoom) return
@@ -119,6 +134,8 @@ const App = () => {
   const handleAuthSuccess = (userData) => {
     setUser(userData)
     setEntered(true)
+    // 로컬 스토리지에 로그인 정보 저장
+    localStorage.setItem('chatUser', JSON.stringify(userData))
   }
 
   const handleSelectRoom = (room) => {
@@ -146,7 +163,21 @@ const App = () => {
     setMessage('')
   }
 
-  const handleLeave = () => {
+  // 채팅방 나가기 (리스트로 돌아가기)
+  const handleLeaveRoom = () => {
+    // 구독 해제
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    setCurrentRoom(null)
+    setMessages([])
+    setMessage('')
+    setMicOn(false)
+  }
+
+  // 로그아웃
+  const handleLogout = () => {
     // 구독 해제
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
@@ -156,6 +187,10 @@ const App = () => {
     setUser(null)
     setCurrentRoom(null)
     setMessages([])
+    setMessage('')
+    setMicOn(false)
+    // 로컬 스토리지에서 로그인 정보 삭제
+    localStorage.removeItem('chatUser')
   }
 
   return (
@@ -174,7 +209,7 @@ const App = () => {
         {!entered || !user ? (
           <EnterScreen onAuthSuccess={handleAuthSuccess} />
         ) : !currentRoom ? (
-          <RoomListScreen user={user} onSelectRoom={handleSelectRoom} />
+          <RoomListScreen user={user} onSelectRoom={handleSelectRoom} onLogout={handleLogout} />
         ) : (
           <ChatScreen
             name={user.nickname}
@@ -185,7 +220,7 @@ const App = () => {
             onToggleMic={() => setMicOn((prev) => !prev)}
             onMessageChange={setMessage}
             onSendMessage={handleSendMessage}
-            onLeave={handleLeave}
+            onLeave={handleLeaveRoom}
           />
         )}
       </Box>

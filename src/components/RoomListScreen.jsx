@@ -16,10 +16,11 @@ import AddIcon from '@mui/icons-material/Add'
 import DeleteIcon from '@mui/icons-material/Delete'
 import LockIcon from '@mui/icons-material/Lock'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
+import LogoutIcon from '@mui/icons-material/Logout'
 import { Switch, FormControlLabel } from '@mui/material'
 import { supabase } from '../lib/supabase'
 
-const RoomListScreen = ({ user, onSelectRoom }) => {
+const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
   const [rooms, setRooms] = useState([])
   const [newRoomName, setNewRoomName] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -126,13 +127,28 @@ const RoomListScreen = ({ user, onSelectRoom }) => {
           backgroundColor: 'rgba(15,23,42,0.9)',
         }}
       >
-        <Box sx={{ mb: 1 }}>
-          <Typography variant="h6" fontWeight={600}>
-            채팅방 선택
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {user.nickname} 님, 참여할 채팅방을 선택하거나 새로 만들어보세요.
-          </Typography>
+        <Box sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Typography variant="h6" fontWeight={600}>
+              채팅방 선택
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {user.nickname} 님, 참여할 채팅방을 선택하거나 새로 만들어보세요.
+            </Typography>
+          </Box>
+          <IconButton
+            color="inherit"
+            onClick={onLogout}
+            sx={{
+              backgroundColor: 'rgba(148,163,184,0.1)',
+              '&:hover': {
+                backgroundColor: 'rgba(148,163,184,0.2)',
+              },
+            }}
+            title="로그아웃"
+          >
+            <LogoutIcon />
+          </IconButton>
         </Box>
 
         <Box
