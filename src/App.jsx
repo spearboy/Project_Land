@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material'
 import EnterScreen from './components/EnterScreen'
 import ChatScreen from './components/ChatScreen'
+import RoomListScreen from './components/RoomListScreen'
 import { supabase } from './lib/supabase'
 
 const darkTheme = createTheme({
@@ -41,22 +42,24 @@ const darkTheme = createTheme({
 })
 
 const App = () => {
-  const [name, setName] = useState('')
+  const [user, setUser] = useState(null) // { id, userId, nickname }
   const [entered, setEntered] = useState(false)
+  const [currentRoom, setCurrentRoom] = useState(null)
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
   const [micOn, setMicOn] = useState(false)
   const channelRef = useRef(null)
 
-  // 입장 시 기존 메시지 로드 및 실시간 구독 설정
+  // 방 입장 시 기존 메시지 로드 및 실시간 구독 설정
   useEffect(() => {
-    if (!entered) return
+    if (!entered || !currentRoom) return
 
     // 기존 메시지 로드
     const loadMessages = async () => {
       const { data, error } = await supabase
         .from('messages')
         .select('*')
+        .eq('room_id', currentRoom.id)
         .order('created_at', { ascending: true })
         .limit(100)
 
@@ -81,13 +84,14 @@ const App = () => {
 
     // 실시간 구독 설정
     const channel = supabase
-      .channel('messages-channel')
+      .channel(`messages-room-${currentRoom.id}`)
       .on(
         'postgres_changes',
         {
           event: 'INSERT',
           schema: 'public',
           table: 'messages',
+          filter: `room_id=eq.${currentRoom.id}`,
         },
         (payload) => {
           const newMessage = {
@@ -110,26 +114,25 @@ const App = () => {
         channelRef.current = null
       }
     }
-  }, [entered])
+  }, [entered, currentRoom])
 
-  const handleEnter = () => {
-    if (!name.trim()) return
+  const handleAuthSuccess = (userData) => {
+    setUser(userData)
     setEntered(true)
   }
 
-  const handleEnterKey = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      handleEnter()
-    }
+  const handleSelectRoom = (room) => {
+    setCurrentRoom(room)
   }
 
   const handleSendMessage = async () => {
     if (!message.trim()) return
+    if (!user) return
 
     // Supabase에 메시지 저장
     const { error } = await supabase.from('messages').insert({
-      user_name: name,
+      room_id: currentRoom.id,
+      user_name: user.nickname,
       text: message.trim(),
     })
 
@@ -150,6 +153,8 @@ const App = () => {
       channelRef.current = null
     }
     setEntered(false)
+    setUser(null)
+    setCurrentRoom(null)
     setMessages([])
   }
 
@@ -166,16 +171,14 @@ const App = () => {
           overflow: 'hidden',
         }}
       >
-        {!entered ? (
-          <EnterScreen
-            name={name}
-            onNameChange={setName}
-            onEnter={handleEnter}
-            onKeyDown={handleEnterKey}
-          />
+        {!entered || !user ? (
+          <EnterScreen onAuthSuccess={handleAuthSuccess} />
+        ) : !currentRoom ? (
+          <RoomListScreen user={user} onSelectRoom={handleSelectRoom} />
         ) : (
           <ChatScreen
-            name={name}
+            name={user.nickname}
+            room={currentRoom}
             messages={messages}
             message={message}
             micOn={micOn}

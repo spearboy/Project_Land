@@ -68,7 +68,7 @@ const MessageList = ({ messages, currentUserName }) => {
             key={m.id}
             sx={{
               alignSelf: isMe ? 'flex-end' : 'flex-start',
-              maxWidth: '85%',
+              maxWidth: '50%',
               minWidth: 'fit-content',
             }}
           >

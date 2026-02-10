@@ -7,6 +7,7 @@ import MessageInput from './MessageInput'
 
 const ChatScreen = ({
   name,
+  room,
   messages,
   message,
   micOn,
@@ -17,7 +18,7 @@ const ChatScreen = ({
 }) => {
   return (
     <>
-      <ChatHeader name={name} micOn={micOn} onToggleMic={onToggleMic} onLeave={onLeave} />
+      <ChatHeader name={name} room={room} micOn={micOn} onToggleMic={onToggleMic} onLeave={onLeave} />
 
       <Box
         sx={{
