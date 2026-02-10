@@ -58,7 +58,7 @@ const MessageList = ({ messages, currentUserName }) => {
             sx={{
               alignSelf: isMe ? 'flex-end' : 'flex-start',
               maxWidth: '85%',
-              minWidth: '60%',
+              minWidth: 'fit-content',
             }}
           >
             <Typography
