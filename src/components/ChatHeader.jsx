@@ -1,10 +1,10 @@
 import React from 'react'
-import { AppBar, Toolbar, Box, Typography, IconButton, Chip } from '@mui/material'
+import { AppBar, Toolbar, Box, Typography, IconButton, Chip, Button } from '@mui/material'
 import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
 
-const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave }) => {
+const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave, participantsCount, onOpenParticipants }) => {
   return (
     <AppBar
       position="static"
@@ -23,6 +23,27 @@ const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave }) => {
           <Typography variant="caption" color="text.secondary" noWrap>
             {name} 님
           </Typography>
+          {typeof participantsCount === 'number' && participantsCount > 0 && (
+            <Button
+              variant="text"
+              size="small"
+              onClick={onOpenParticipants}
+              sx={{
+                mt: 0.5,
+                p: 0,
+                minWidth: 'auto',
+                fontSize: '0.75rem',
+                textTransform: 'none',
+                color: 'text.secondary',
+                '&:hover': {
+                  backgroundColor: 'transparent',
+                  color: 'primary.main',
+                },
+              }}
+            >
+              참가자 {participantsCount}명
+            </Button>
+          )}
         </Box>
         {room?.is_private && room?.invite_code && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', mr: 1 }}>

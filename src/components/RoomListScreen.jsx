@@ -238,15 +238,40 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
                 <ListItem
                   key={room.id}
                   button
-                  onClick={() => {
+                  onClick={async () => {
+                    // 비밀방 접근 제어
                     if (room.is_private && !user.isAdmin) {
-                      const code = window.prompt('이 비밀방의 초대코드를 입력하세요.')
-                      if (!code) return
-                      if (code.trim().toUpperCase() !== (room.invite_code || '').toUpperCase()) {
-                        alert('초대코드가 올바르지 않습니다.')
-                        return
+                      // 생성자는 항상 바로 입장 가능
+                      if (room.creator_id !== user.id) {
+                        // 이미 참여한 적이 있는지 확인
+                        const { data: existing, error } = await supabase
+                          .from('room_participants')
+                          .select('id')
+                          .eq('room_id', room.id)
+                          .eq('user_id', user.id)
+                          .maybeSingle()
+
+                        if (error) {
+                          console.error('참가자 확인 오류:', error)
+                          alert('채팅방에 입장할 수 없습니다. 잠시 후 다시 시도해주세요.')
+                          return
+                        }
+
+                        // 처음 입장하는 경우에만 초대코드 요구
+                        if (!existing) {
+                          const code = window.prompt('이 비밀방의 초대코드를 입력하세요.')
+                          if (!code) return
+                          if (
+                            code.trim().toUpperCase() !==
+                            (room.invite_code || '').toUpperCase()
+                          ) {
+                            alert('초대코드가 올바르지 않습니다.')
+                            return
+                          }
+                        }
                       }
                     }
+
                     onSelectRoom(room)
                   }}
                   sx={{

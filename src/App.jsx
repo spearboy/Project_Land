@@ -42,12 +42,13 @@ const darkTheme = createTheme({
 })
 
 const App = () => {
-  const [user, setUser] = useState(null) // { id, userId, nickname }
+  const [user, setUser] = useState(null) // { id, userId, nickname, isAdmin }
   const [entered, setEntered] = useState(false)
   const [currentRoom, setCurrentRoom] = useState(null)
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
   const [micOn, setMicOn] = useState(false)
+  const [participants, setParticipants] = useState([])
   const channelRef = useRef(null)
 
   // 앱 시작 시 로컬 스토리지에서 로그인 정보 로드
@@ -65,27 +66,32 @@ const App = () => {
     }
   }, [])
 
-  // 방 입장 시 기존 메시지 로드 및 실시간 구독 설정
+  // 방 입장 시 기존 메시지 & 참가자 로드 및 실시간 구독 설정
   useEffect(() => {
     if (!entered || !currentRoom) return
 
-    // 기존 메시지 로드
-    const loadMessages = async () => {
-      const { data, error } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('room_id', currentRoom.id)
-        .order('created_at', { ascending: true })
-        .limit(100)
+    const loadRoomData = async () => {
+      // 기존 메시지 로드
+      const [{ data: msgData, error: msgError }, { data: participantData, error: participantError }] =
+        await Promise.all([
+          supabase
+            .from('messages')
+            .select('*')
+            .eq('room_id', currentRoom.id)
+            .order('created_at', { ascending: true })
+            .limit(100),
+          supabase
+            .from('room_participants')
+            .select('*')
+            .eq('room_id', currentRoom.id)
+            .order('joined_at', { ascending: true }),
+        ])
 
-      if (error) {
-        console.error('메시지 로드 오류:', error)
-        return
-      }
-
-      if (data) {
+      if (msgError) {
+        console.error('메시지 로드 오류:', msgError)
+      } else if (msgData) {
         setMessages(
-          data.map((msg) => ({
+          msgData.map((msg) => ({
             id: msg.id,
             user: msg.user_name,
             text: msg.text,
@@ -93,9 +99,15 @@ const App = () => {
           }))
         )
       }
+
+      if (participantError) {
+        console.error('참가자 로드 오류:', participantError)
+      } else if (participantData) {
+        setParticipants(participantData)
+      }
     }
 
-    loadMessages()
+    loadRoomData()
 
     // 실시간 구독 설정
     const channel = supabase
@@ -138,13 +150,50 @@ const App = () => {
     localStorage.setItem('chatUser', JSON.stringify(userData))
   }
 
-  const handleSelectRoom = (room) => {
+  const handleSelectRoom = async (room) => {
+    if (!user) return
+
+    // 참가자 정보 upsert (이미 참가 중이면 유지)
+    const role = room.creator_id === user.id ? 'creator' : 'member'
+
+    const { error } = await supabase.from('room_participants').upsert(
+      {
+        room_id: room.id,
+        user_id: user.id,
+        nickname: user.nickname,
+        role,
+      },
+      {
+        onConflict: 'room_id,user_id',
+      }
+    )
+
+    if (error) {
+      console.error('방 참가 오류:', error)
+      alert('채팅방에 입장할 수 없습니다. 잠시 후 다시 시도해주세요.')
+      return
+    }
+
     setCurrentRoom(room)
   }
 
   const handleSendMessage = async () => {
     if (!message.trim()) return
     if (!user) return
+    if (!currentRoom) return
+
+    // 방이 아직 존재하는지 확인
+    const { data: roomData, error: roomError } = await supabase
+      .from('rooms')
+      .select('id')
+      .eq('id', currentRoom.id)
+      .maybeSingle()
+
+    if (roomError || !roomData) {
+      alert('이미 삭제된 방입니다. 리스트로 이동합니다.')
+      handleLeaveRoom()
+      return
+    }
 
     // Supabase에 메시지 저장
     const { error } = await supabase.from('messages').insert({
@@ -155,7 +204,9 @@ const App = () => {
 
     if (error) {
       console.error('메시지 전송 오류:', error)
-      alert('메시지 전송에 실패했습니다.')
+      // FK 제약 등으로 방이 이미 삭제된 경우를 대비
+      alert('이미 삭제된 방입니다. 리스트로 이동합니다.')
+      handleLeaveRoom()
       return
     }
 
@@ -174,6 +225,7 @@ const App = () => {
     setMessages([])
     setMessage('')
     setMicOn(false)
+    setParticipants([])
   }
 
   // 로그아웃
@@ -214,6 +266,7 @@ const App = () => {
           <ChatScreen
             name={user.nickname}
             room={currentRoom}
+            participants={participants}
             messages={messages}
             message={message}
             micOn={micOn}

@@ -39,10 +39,55 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 실시간 기능 활성화 (Realtime)
-ALTER PUBLICATION supabase_realtime ADD TABLE users;
-ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+-- room_participants 테이블 생성 (채팅방 참가자)
+CREATE TABLE IF NOT EXISTS room_participants (
+  id BIGSERIAL PRIMARY KEY,
+  room_id BIGINT REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+  nickname TEXT NOT NULL,
+  role TEXT NOT NULL DEFAULT 'member', -- 'creator' 또는 'member'
+  joined_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 동일한 유저가 같은 방에 중복으로 들어가지 않도록 제약
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_participants_unique
+  ON room_participants(room_id, user_id);
+
+-- 실시간 기능 활성화 (Realtime) - 이미 추가된 테이블은 스킵
+DO $$
+BEGIN
+  -- users 테이블
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'users'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE users;
+  END IF;
+
+  -- rooms 테이블
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'rooms'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE rooms;
+  END IF;
+
+  -- messages 테이블
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'messages'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+  END IF;
+
+  -- room_participants 테이블
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'room_participants'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE room_participants;
+  END IF;
+END $$;
 
 -- 인덱스 추가 (성능 최적화)
 CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
@@ -52,33 +97,113 @@ CREATE INDEX IF NOT EXISTS idx_messages_room_created_at ON messages(room_id, cre
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
 
--- 모든 사용자가 유저 정보를 읽을 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 유저 정보 읽기 가능"
-  ON users FOR SELECT
-  USING (true);
+-- RLS 정책 생성 (이미 존재하는 정책은 스킵)
+DO $$
+BEGIN
+  -- users 테이블 정책
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = '모든 사용자가 유저 정보 읽기 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 유저 정보 읽기 가능"
+      ON users FOR SELECT
+      USING (true);
+  END IF;
 
--- 모든 사용자가 유저를 생성할 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 유저 생성 가능"
-  ON users FOR INSERT
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = '모든 사용자가 유저 생성 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 유저 생성 가능"
+      ON users FOR INSERT
+      WITH CHECK (true);
+  END IF;
 
--- 모든 사용자가 방 목록을 읽을 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 방 읽기 가능"
-  ON rooms FOR SELECT
-  USING (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'users' AND policyname = '모든 사용자가 유저 정보 업데이트 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 유저 정보 업데이트 가능"
+      ON users FOR UPDATE
+      USING (true)
+      WITH CHECK (true);
+  END IF;
 
--- 모든 사용자가 방을 생성할 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 방 생성 가능"
-  ON rooms FOR INSERT
-  WITH CHECK (true);
+  -- rooms 테이블 정책
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'rooms' AND policyname = '모든 사용자가 방 읽기 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 방 읽기 가능"
+      ON rooms FOR SELECT
+      USING (true);
+  END IF;
 
--- 모든 사용자가 메시지를 읽을 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 메시지 읽기 가능"
-  ON messages FOR SELECT
-  USING (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'rooms' AND policyname = '모든 사용자가 방 생성 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 방 생성 가능"
+      ON rooms FOR INSERT
+      WITH CHECK (true);
+  END IF;
 
--- 모든 사용자가 메시지를 작성할 수 있도록 설정 (데모용)
-CREATE POLICY "모든 사용자가 메시지 작성 가능"
-  ON messages FOR INSERT
-  WITH CHECK (true);
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'rooms' AND policyname = '모든 사용자가 방 삭제 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 방 삭제 가능"
+      ON rooms FOR DELETE
+      USING (true);
+  END IF;
+
+  -- messages 테이블 정책
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'messages' AND policyname = '모든 사용자가 메시지 읽기 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 메시지 읽기 가능"
+      ON messages FOR SELECT
+      USING (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'messages' AND policyname = '모든 사용자가 메시지 작성 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 메시지 작성 가능"
+      ON messages FOR INSERT
+      WITH CHECK (true);
+  END IF;
+
+  -- room_participants 테이블 정책
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_participants' AND policyname = '모든 사용자가 참가자 읽기 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 참가자 읽기 가능"
+      ON room_participants FOR SELECT
+      USING (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_participants' AND policyname = '모든 사용자가 참가자 추가 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 참가자 추가 가능"
+      ON room_participants FOR INSERT
+      WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_participants' AND policyname = '모든 사용자가 참가자 업데이트 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 참가자 업데이트 가능"
+      ON room_participants FOR UPDATE
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+END $$;
