@@ -87,7 +87,12 @@ const MessageList = ({ messages, currentUserName, participants = [] }) => {
         const prevMessage = index > 0 ? messages[index - 1] : null
         const nextMessage = index < messages.length - 1 ? messages[index + 1] : null
         
-        // 같은 시간대인지 확인
+        // 이름 표시: 이전 메시지가 없거나, 이전 메시지와 시간이 다르거나, 이전 메시지와 사용자가 다르면 표시
+        const showName = !prevMessage || 
+          !isSameTime(m.created_at, prevMessage.created_at) || 
+          m.user !== prevMessage.user
+        
+        // 시간 표시: 다음 메시지가 없거나, 다음 메시지와 시간이 다르면 표시 (마지막 메시지에만)
         const showTime = !nextMessage || !isSameTime(m.created_at, nextMessage.created_at)
 
         return (
@@ -95,41 +100,25 @@ const MessageList = ({ messages, currentUserName, participants = [] }) => {
             key={m.id}
             sx={{
               alignSelf: isMe ? 'flex-end' : 'flex-start',
-              maxWidth: '50%',
-              minWidth: 'fit-content',
+              maxWidth: '70%',
+              minWidth: '20px',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: isMe ? 'row-reverse' : 'row',
-                alignItems: 'center',
-                gap: 0.5,
-                mb: 0.5,
-              }}
-            >
+            {showName && (
               <Typography
                 variant="caption"
                 color="text.secondary"
                 sx={{
                   fontSize: '0.7rem',
+                  mb: 0.5,
+                  alignSelf: isMe ? 'flex-end' : 'flex-start',
                 }}
               >
                 {isMe ? '나' : m.user}
               </Typography>
-              {showTime && (
-                <Typography
-                  variant="caption"
-                  color="text.secondary"
-                  sx={{
-                    fontSize: '0.65rem',
-                    opacity: 0.7,
-                  }}
-                >
-                  {formatTime(m.created_at)}
-                </Typography>
-              )}
-            </Box>
+            )}
             <Box
               sx={{
                 px: 2,
@@ -165,6 +154,20 @@ const MessageList = ({ messages, currentUserName, participants = [] }) => {
                 })}
               </Typography>
             </Box>
+            {showTime && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{
+                  fontSize: '0.65rem',
+                  opacity: 0.7,
+                  mt: 0.5,
+                  alignSelf: isMe ? 'flex-end' : 'flex-start',
+                }}
+              >
+                {formatTime(m.created_at)}
+              </Typography>
+            )}
           </Box>
         )
       })}
