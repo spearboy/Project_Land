@@ -1,8 +1,18 @@
-import React from 'react'
+import React, { useEffect, useRef } from 'react'
 import { Box, Typography } from '@mui/material'
 import MicIcon from '@mui/icons-material/Mic'
 
 const MessageList = ({ messages, currentUserName }) => {
+  const containerRef = useRef(null)
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    if (!containerRef.current || !bottomRef.current) return
+
+    // 새 메시지가 들어올 때마다 아래로 스크롤
+    bottomRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [messages])
+
   if (!messages.length) {
     return (
       <Box
@@ -40,6 +50,7 @@ const MessageList = ({ messages, currentUserName }) => {
 
   return (
     <Box
+      ref={containerRef}
       sx={{
         flex: 1,
         overflowY: 'auto',
@@ -90,6 +101,7 @@ const MessageList = ({ messages, currentUserName }) => {
           </Box>
         )
       })}
+      <Box ref={bottomRef} sx={{ height: 1 }} />
     </Box>
   )
 }
