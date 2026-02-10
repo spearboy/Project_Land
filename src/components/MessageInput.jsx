@@ -2,8 +2,25 @@ import React from 'react'
 import { Box, TextField, Fab } from '@mui/material'
 import SendIcon from '@mui/icons-material/Send'
 
+// 모바일 기기 감지
+const isMobile = () => {
+  return (
+    /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+      navigator.userAgent
+    ) ||
+    (typeof window !== 'undefined' && window.innerWidth <= 768) ||
+    'ontouchstart' in window
+  )
+}
+
 const MessageInput = ({ message, onChange, onSend }) => {
   const handleKeyDown = (e) => {
+    // 모바일에서는 Enter 키를 막지 않음 (줄바꿈 허용)
+    if (isMobile()) {
+      return
+    }
+
+    // 데스크톱에서는 Enter로 전송, Shift+Enter로 줄바꿈
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       onSend()

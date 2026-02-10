@@ -3,8 +3,20 @@ import { AppBar, Toolbar, Box, Typography, IconButton, Chip, Button } from '@mui
 import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
+import NotificationsIcon from '@mui/icons-material/Notifications'
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff'
 
-const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave, participantsCount, onOpenParticipants }) => {
+const ChatHeader = ({
+  name,
+  room,
+  micOn,
+  onToggleMic,
+  onLeave,
+  participantsCount,
+  onOpenParticipants,
+  notificationEnabled,
+  onToggleNotification,
+}) => {
   return (
     <AppBar
       position="static"
@@ -29,7 +41,7 @@ const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave, participantsCount
               size="small"
               onClick={onOpenParticipants}
               sx={{
-                mt: 0.5,
+                ml: 3,
                 p: 0,
                 minWidth: 'auto',
                 fontSize: '0.75rem',
@@ -60,13 +72,26 @@ const ChatHeader = ({ name, room, micOn, onToggleMic, onLeave, participantsCount
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton
-            color={micOn ? 'secondary' : 'default'}
-            onClick={onToggleMic}
+            color={notificationEnabled ? 'primary' : 'default'}
+            onClick={onToggleNotification}
+            title={notificationEnabled ? '알림 끄기' : '알림 켜기'}
             sx={{
-              backgroundColor: micOn ? 'rgba(236,72,153,0.2)' : 'transparent',
+              backgroundColor: notificationEnabled ? 'rgba(99,102,241,0.2)' : 'transparent',
             }}
           >
-            {micOn ? <MicIcon /> : <MicOffIcon />}
+            {notificationEnabled ? <NotificationsIcon /> : <NotificationsOffIcon />}
+          </IconButton>
+          <IconButton
+            color="default"
+            disabled
+            sx={{
+              backgroundColor: 'transparent',
+              opacity: 0.4,
+              cursor: 'not-allowed',
+            }}
+            title="음성 채팅은 아직 준비 중입니다"
+          >
+            <MicOffIcon />
           </IconButton>
           <IconButton
             color="inherit"

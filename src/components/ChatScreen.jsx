@@ -17,6 +17,8 @@ const ChatScreen = ({
   onMessageChange,
   onSendMessage,
   onLeave,
+  notificationEnabled,
+  onToggleNotification,
 }) => {
   const [openParticipants, setOpenParticipants] = useState(false)
 
@@ -32,6 +34,8 @@ const ChatScreen = ({
         onLeave={onLeave}
         participantsCount={participantsCount}
         onOpenParticipants={() => setOpenParticipants(true)}
+        notificationEnabled={notificationEnabled}
+        onToggleNotification={onToggleNotification}
       />
 
       <Box
@@ -42,7 +46,7 @@ const ChatScreen = ({
           flexDirection: 'column',
         }}
       >
-        <MessageList messages={messages} currentUserName={name} />
+        <MessageList messages={messages} currentUserName={name} participants={participants} />
       </Box>
 
       <VoiceStatusBar micOn={micOn} />

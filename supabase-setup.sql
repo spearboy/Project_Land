@@ -53,6 +53,31 @@ CREATE TABLE IF NOT EXISTS room_participants (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_room_participants_unique
   ON room_participants(room_id, user_id);
 
+-- room_notification_settings 테이블 생성 (방별 알림 설정)
+CREATE TABLE IF NOT EXISTS room_notification_settings (
+  id BIGSERIAL PRIMARY KEY,
+  room_id BIGINT REFERENCES rooms(id) ON DELETE CASCADE,
+  user_id BIGINT REFERENCES users(id) ON DELETE CASCADE,
+  notifications_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 동일한 유저가 같은 방에 중복 설정을 가지지 않도록 제약
+CREATE UNIQUE INDEX IF NOT EXISTS idx_room_notification_settings_unique
+  ON room_notification_settings(room_id, user_id);
+
+-- messages 테이블에 mentions 컬럼 추가 (맨션된 사용자 닉네임 배열)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'messages' AND column_name = 'mentions'
+  ) THEN
+    ALTER TABLE messages ADD COLUMN mentions TEXT[];
+  END IF;
+END $$;
+
 -- 실시간 기능 활성화 (Realtime) - 이미 추가된 테이블은 스킵
 DO $$
 BEGIN
@@ -87,6 +112,14 @@ BEGIN
   ) THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE room_participants;
   END IF;
+
+  -- room_notification_settings 테이블
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables 
+    WHERE pubname = 'supabase_realtime' AND tablename = 'room_notification_settings'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE room_notification_settings;
+  END IF;
 END $$;
 
 -- 인덱스 추가 (성능 최적화)
@@ -98,6 +131,7 @@ ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rooms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE room_participants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE room_notification_settings ENABLE ROW LEVEL SECURITY;
 
 -- RLS 정책 생성 (이미 존재하는 정책은 스킵)
 DO $$
@@ -203,6 +237,35 @@ BEGIN
   ) THEN
     CREATE POLICY "모든 사용자가 참가자 업데이트 가능"
       ON room_participants FOR UPDATE
+      USING (true)
+      WITH CHECK (true);
+  END IF;
+
+  -- room_notification_settings 테이블 정책
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_notification_settings' AND policyname = '모든 사용자가 알림 설정 읽기 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 알림 설정 읽기 가능"
+      ON room_notification_settings FOR SELECT
+      USING (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_notification_settings' AND policyname = '모든 사용자가 알림 설정 추가 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 알림 설정 추가 가능"
+      ON room_notification_settings FOR INSERT
+      WITH CHECK (true);
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies 
+    WHERE schemaname = 'public' AND tablename = 'room_notification_settings' AND policyname = '모든 사용자가 알림 설정 업데이트 가능'
+  ) THEN
+    CREATE POLICY "모든 사용자가 알림 설정 업데이트 가능"
+      ON room_notification_settings FOR UPDATE
       USING (true)
       WITH CHECK (true);
   END IF;

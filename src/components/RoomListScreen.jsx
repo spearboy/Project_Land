@@ -17,10 +17,12 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import LockIcon from '@mui/icons-material/Lock'
 import LockOpenIcon from '@mui/icons-material/LockOpen'
 import LogoutIcon from '@mui/icons-material/Logout'
+import NotificationsIcon from '@mui/icons-material/Notifications'
+import NotificationsOffIcon from '@mui/icons-material/NotificationsOff'
 import { Switch, FormControlLabel } from '@mui/material'
 import { supabase } from '../lib/supabase'
 
-const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
+const RoomListScreen = ({ user, onSelectRoom, onLogout, notificationSettings, onToggleNotification }) => {
   const [rooms, setRooms] = useState([])
   const [newRoomName, setNewRoomName] = useState('')
   const [isPrivate, setIsPrivate] = useState(false)
@@ -299,20 +301,42 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout }) => {
                       </Box>
                     }
                   />
-                  {(room.creator_id === user.id || user.isAdmin) && (
-                    <ListItemSecondaryAction>
+                  <ListItemSecondaryAction>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                       <IconButton
                         edge="end"
                         size="small"
                         onClick={(e) => {
                           e.stopPropagation()
-                          handleDeleteRoom(room.id, room.creator_id)
+                          const currentSetting = notificationSettings[room.id] !== false
+                          onToggleNotification(room.id, !currentSetting)
                         }}
+                        title={
+                          notificationSettings[room.id] === false
+                            ? '알림 켜기'
+                            : '알림 끄기'
+                        }
                       >
-                        <DeleteIcon fontSize="small" />
+                        {notificationSettings[room.id] === false ? (
+                          <NotificationsOffIcon fontSize="small" />
+                        ) : (
+                          <NotificationsIcon fontSize="small" />
+                        )}
                       </IconButton>
-                    </ListItemSecondaryAction>
-                  )}
+                      {(room.creator_id === user.id || user.isAdmin) && (
+                        <IconButton
+                          edge="end"
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteRoom(room.id, room.creator_id)
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  </ListItemSecondaryAction>
                 </ListItem>
               ))}
             </List>
