@@ -1,7 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material'
 import EnterScreen from './components/EnterScreen'
 import ChatScreen from './components/ChatScreen'
+import { supabase } from './lib/supabase'
 
 const darkTheme = createTheme({
   palette: {
@@ -45,6 +46,71 @@ const App = () => {
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
   const [micOn, setMicOn] = useState(false)
+  const channelRef = useRef(null)
+
+  // 입장 시 기존 메시지 로드 및 실시간 구독 설정
+  useEffect(() => {
+    if (!entered) return
+
+    // 기존 메시지 로드
+    const loadMessages = async () => {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(100)
+
+      if (error) {
+        console.error('메시지 로드 오류:', error)
+        return
+      }
+
+      if (data) {
+        setMessages(
+          data.map((msg) => ({
+            id: msg.id,
+            user: msg.user_name,
+            text: msg.text,
+            created_at: msg.created_at,
+          }))
+        )
+      }
+    }
+
+    loadMessages()
+
+    // 실시간 구독 설정
+    const channel = supabase
+      .channel('messages-channel')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const newMessage = {
+            id: payload.new.id,
+            user: payload.new.user_name,
+            text: payload.new.text,
+            created_at: payload.new.created_at,
+          }
+          setMessages((prev) => [...prev, newMessage])
+        }
+      )
+      .subscribe()
+
+    channelRef.current = channel
+
+    // 정리 함수
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [entered])
 
   const handleEnter = () => {
     if (!name.trim()) return
@@ -58,10 +124,33 @@ const App = () => {
     }
   }
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!message.trim()) return
-    setMessages((prev) => [...prev, { id: Date.now(), user: name, text: message }])
+
+    // Supabase에 메시지 저장
+    const { error } = await supabase.from('messages').insert({
+      user_name: name,
+      text: message.trim(),
+    })
+
+    if (error) {
+      console.error('메시지 전송 오류:', error)
+      alert('메시지 전송에 실패했습니다.')
+      return
+    }
+
+    // 로컬 상태는 Realtime 구독으로 자동 업데이트됨
     setMessage('')
+  }
+
+  const handleLeave = () => {
+    // 구독 해제
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    setEntered(false)
+    setMessages([])
   }
 
   return (
@@ -93,7 +182,7 @@ const App = () => {
             onToggleMic={() => setMicOn((prev) => !prev)}
             onMessageChange={setMessage}
             onSendMessage={handleSendMessage}
-            onLeave={() => setEntered(false)}
+            onLeave={handleLeave}
           />
         )}
       </Box>
