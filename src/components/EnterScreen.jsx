@@ -8,11 +8,47 @@ const passwordIsValid = (password) => {
   return /[!@#$%^&*(),.?":{}|<>_\-\\[\];'`~+/=]/.test(password)
 }
 
+// Web Crypto API를 사용한 비밀번호 해시 함수 (SHA-256 + salt)
+const hashPassword = async (password) => {
+  // 랜덤 salt 생성
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const saltHex = Array.from(salt)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('')
+
+  // 비밀번호 + salt를 인코딩
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + saltHex)
+
+  // SHA-256 해시
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+
+  // salt와 해시를 함께 저장 (형식: salt:hash)
+  return `${saltHex}:${hashHex}`
+}
+
+// 비밀번호 검증 함수
+const verifyPassword = async (password, passwordHash) => {
+  const [saltHex, storedHash] = passwordHash.split(':')
+  if (!saltHex || !storedHash) return false
+
+  const encoder = new TextEncoder()
+  const data = encoder.encode(password + saltHex)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('')
+
+  return hashHex === storedHash
+}
+
 const EnterScreen = ({ onAuthSuccess }) => {
-  const [mode, setMode] = useState('login') // 'login' or 'signup'
+  const [mode, setMode] = useState('login') // 'login', 'signup', or 'forgot'
   const [userId, setUserId] = useState('')
   const [password, setPassword] = useState('')
   const [nickname, setNickname] = useState('')
+  const [newPassword, setNewPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState({})
 
@@ -40,14 +76,23 @@ const EnterScreen = ({ onAuthSuccess }) => {
     setLoading(true)
 
     try {
+      // 아이디로 유저 조회
       const { data, error } = await supabase
         .from('users')
         .select('*')
         .eq('user_id', userId.trim())
-        .eq('password', password)
         .single()
 
       if (error || !data) {
+        setErrors({
+          password: '아이디 또는 비밀번호가 올바르지 않습니다.',
+        })
+        return
+      }
+
+      // 비밀번호 해시 검증
+      const isValid = await verifyPassword(password, data.password_hash)
+      if (!isValid) {
         setErrors({
           password: '아이디 또는 비밀번호가 올바르지 않습니다.',
         })
@@ -105,12 +150,15 @@ const EnterScreen = ({ onAuthSuccess }) => {
         return
       }
 
+      // 비밀번호 해시 생성
+      const passwordHash = await hashPassword(password)
+
       // 중복이 없으면 회원가입 진행
       const { data, error } = await supabase
         .from('users')
         .insert({
           user_id: userId.trim(),
-          password, // 데모용: 실제 서비스에서는 반드시 해시해야 합니다.
+          password_hash: passwordHash,
           nickname: nickname.trim(),
           is_admin: false,
         })
@@ -136,11 +184,67 @@ const EnterScreen = ({ onAuthSuccess }) => {
     }
   }
 
+  const handleForgotPassword = async () => {
+    const newErrors = {}
+    if (!userId.trim()) newErrors.userId = '아이디를 입력해주세요.'
+    if (!nickname.trim()) newErrors.nickname = '닉네임을 입력해주세요.'
+    if (!passwordIsValid(newPassword)) {
+      newErrors.newPassword = '비밀번호는 8자리 이상이며 특수문자를 1개 이상 포함해야 합니다.'
+    }
+    setErrors(newErrors)
+    if (Object.keys(newErrors).length > 0) return
+
+    setLoading(true)
+
+    try {
+      // 아이디와 닉네임으로 유저 검증
+      const { data: user, error: findError } = await supabase
+        .from('users')
+        .select('*')
+        .eq('user_id', userId.trim())
+        .eq('nickname', nickname.trim())
+        .single()
+
+      if (findError || !user) {
+        setErrors({
+          nickname: '아이디와 닉네임이 일치하지 않습니다.',
+        })
+        setLoading(false)
+        return
+      }
+
+      // 새 비밀번호 해시 생성
+      const passwordHash = await hashPassword(newPassword)
+
+      // 비밀번호 업데이트
+      const { error: updateError } = await supabase
+        .from('users')
+        .update({ password_hash: passwordHash })
+        .eq('id', user.id)
+
+      if (updateError) {
+        console.error('비밀번호 변경 오류:', updateError)
+        alert('비밀번호 변경에 실패했습니다. 다시 시도해주세요.')
+        return
+      }
+
+      alert('비밀번호가 성공적으로 변경되었습니다. 로그인해주세요.')
+      switchMode('login')
+    } catch (err) {
+      console.error('비밀번호 찾기 오류:', err)
+      alert('비밀번호 찾기에 실패했습니다. 다시 시도해주세요.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSubmit = () => {
     if (mode === 'login') {
       handleLogin()
-    } else {
+    } else if (mode === 'signup') {
       handleSignup()
+    } else if (mode === 'forgot') {
+      handleForgotPassword()
     }
   }
 
@@ -155,6 +259,7 @@ const EnterScreen = ({ onAuthSuccess }) => {
     setUserId('')
     setPassword('')
     setNickname('')
+    setNewPassword('')
     setErrors({})
   }
 
@@ -197,7 +302,9 @@ const EnterScreen = ({ onAuthSuccess }) => {
         <Typography variant="body1" color="text.secondary">
           {mode === 'login'
             ? '아이디와 비밀번호로 로그인하세요.'
-            : '회원가입 정보를 입력하세요.'}
+            : mode === 'signup'
+            ? '회원가입 정보를 입력하세요.'
+            : '아이디와 닉네임을 입력하고 새 비밀번호를 설정하세요.'}
         </Typography>
 
         <TextField
@@ -216,26 +323,28 @@ const EnterScreen = ({ onAuthSuccess }) => {
           error={Boolean(errors.userId)}
           helperText={errors.userId}
         />
-        <TextField
-          label="비밀번호"
-          type="password"
-          variant="outlined"
-          fullWidth
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={handleKeyDown}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              fontSize: '1rem',
-            },
-          }}
-          error={Boolean(errors.password)}
-          helperText={
-            errors.password ||
-            (mode === 'signup' ? '8자리 이상, 특수문자 1개 이상 포함' : '')
-          }
-        />
-        {mode === 'signup' && (
+        {mode !== 'forgot' && (
+          <TextField
+            label="비밀번호"
+            type="password"
+            variant="outlined"
+            fullWidth
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: '1rem',
+              },
+            }}
+            error={Boolean(errors.password)}
+            helperText={
+              errors.password ||
+              (mode === 'signup' ? '8자리 이상, 특수문자 1개 이상 포함' : '')
+            }
+          />
+        )}
+        {(mode === 'signup' || mode === 'forgot') && (
           <TextField
             label="닉네임"
             variant="outlined"
@@ -252,6 +361,26 @@ const EnterScreen = ({ onAuthSuccess }) => {
             helperText={errors.nickname}
           />
         )}
+        {mode === 'forgot' && (
+          <TextField
+            label="새 비밀번호"
+            type="password"
+            variant="outlined"
+            fullWidth
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            onKeyDown={handleKeyDown}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                fontSize: '1rem',
+              },
+            }}
+            error={Boolean(errors.newPassword)}
+            helperText={
+              errors.newPassword || '8자리 이상, 특수문자 1개 이상 포함'
+            }
+          />
+        )}
 
         <Button
           fullWidth
@@ -264,33 +393,57 @@ const EnterScreen = ({ onAuthSuccess }) => {
           {loading
             ? mode === 'login'
               ? '로그인 중...'
-              : '가입 중...'
+              : mode === 'signup'
+              ? '가입 중...'
+              : '변경 중...'
             : mode === 'login'
             ? '로그인'
-            : '회원가입'}
+            : mode === 'signup'
+            ? '회원가입'
+            : '비밀번호 변경'}
         </Button>
 
-        <Box sx={{ mt: 1 }}>
+        <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
           {mode === 'login' ? (
-            <Typography variant="body2" color="text.secondary">
-              계정이 없으신가요?{' '}
-              <Link
-                component="button"
-                variant="body2"
-                onClick={() => switchMode('signup')}
-                sx={{
-                  color: 'primary.main',
-                  textDecoration: 'none',
-                  cursor: 'pointer',
-                  '&:hover': {
-                    textDecoration: 'underline',
-                  },
-                }}
-              >
-                회원가입
-              </Link>
-            </Typography>
-          ) : (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                계정이 없으신가요?{' '}
+                <Link
+                  component="button"
+                  variant="body2"
+                  onClick={() => switchMode('signup')}
+                  sx={{
+                    color: 'primary.main',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  회원가입
+                </Link>
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                비밀번호를 잊으셨나요?{' '}
+                <Link
+                  component="button"
+                  variant="body2"
+                  onClick={() => switchMode('forgot')}
+                  sx={{
+                    color: 'primary.main',
+                    textDecoration: 'none',
+                    cursor: 'pointer',
+                    '&:hover': {
+                      textDecoration: 'underline',
+                    },
+                  }}
+                >
+                  비밀번호 찾기
+                </Link>
+              </Typography>
+            </>
+          ) : mode === 'signup' ? (
             <Typography variant="body2" color="text.secondary">
               이미 계정이 있으신가요?{' '}
               <Link
@@ -307,6 +460,24 @@ const EnterScreen = ({ onAuthSuccess }) => {
                 }}
               >
                 로그인
+              </Link>
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              <Link
+                component="button"
+                variant="body2"
+                onClick={() => switchMode('login')}
+                sx={{
+                  color: 'primary.main',
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    textDecoration: 'underline',
+                  },
+                }}
+              >
+                로그인으로 돌아가기
               </Link>
             </Typography>
           )}

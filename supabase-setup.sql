@@ -5,11 +5,19 @@
 CREATE TABLE IF NOT EXISTS users (
   id BIGSERIAL PRIMARY KEY,
   user_id TEXT NOT NULL UNIQUE, -- 로그인용 아이디
-  password TEXT NOT NULL,       -- 데모용: 실제 서비스에서는 반드시 해시 사용
+  password_hash TEXT NOT NULL,   -- 비밀번호 해시 (SHA-256 + salt)
   nickname TEXT NOT NULL UNIQUE, -- 채팅에 보여질 닉네임 (중복 불가)
   is_admin BOOLEAN NOT NULL DEFAULT FALSE, -- 관리자 여부
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 기존 password 컬럼이 있다면 password_hash로 변경
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'users' AND column_name = 'password') THEN
+    ALTER TABLE users RENAME COLUMN password TO password_hash;
+  END IF;
+END $$;
 
 -- rooms 테이블 생성 (채팅방 정보)
 CREATE TABLE IF NOT EXISTS rooms (
