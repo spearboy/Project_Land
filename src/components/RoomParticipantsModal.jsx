@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -13,8 +13,11 @@ import {
 } from '@mui/material'
 
 const RoomParticipantsModal = ({ open, onClose, room, participants, currentUserName }) => {
-  const creator = participants?.find((p) => p.role === 'creator') || null
-  const members = (participants || []).filter((p) => p.role !== 'creator')
+  const { creator, members } = useMemo(() => {
+    const creator = participants?.find((p) => p.role === 'creator') || null
+    const members = (participants || []).filter((p) => p.role !== 'creator')
+    return { creator, members }
+  }, [participants])
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
@@ -87,4 +90,3 @@ const RoomParticipantsModal = ({ open, onClose, room, participants, currentUserN
 }
 
 export default RoomParticipantsModal
-

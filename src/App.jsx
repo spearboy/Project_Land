@@ -1,13 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react'
-import { ThemeProvider, createTheme, CssBaseline, Box } from '@mui/material'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import { ThemeProvider, createTheme, CssBaseline, Box, GlobalStyles } from '@mui/material'
 import { SnackbarProvider, useSnackbar } from 'notistack'
 import EnterScreen from './components/EnterScreen'
 import ChatScreen from './components/ChatScreen'
 import RoomListScreen from './components/RoomListScreen'
+import AlertModal from './components/AlertModal'
 import { supabase } from './lib/supabase'
 import { parseMentions } from './utils/mentionParser'
+import { ERROR_CODES, getErrorMessage } from './constants/errorCodes'
 
-const APP_VERSION = 'v0.0.8'
+const APP_VERSION = 'v1.0.0'
 
 const darkTheme = createTheme({
   palette: {
@@ -30,7 +32,7 @@ const darkTheme = createTheme({
     MuiButton: {
       styleOverrides: {
         root: {
-          minHeight: 48, // 터치 친화적 버튼 크기
+          minHeight: 48,
         },
       },
     },
@@ -47,21 +49,28 @@ const darkTheme = createTheme({
 
 const AppContent = () => {
   const { enqueueSnackbar } = useSnackbar()
-  const [user, setUser] = useState(null) // { id, userId, nickname, isAdmin }
+  const [user, setUser] = useState(null)
   const [entered, setEntered] = useState(false)
   const [currentRoom, setCurrentRoom] = useState(null)
   const [message, setMessage] = useState('')
   const [messages, setMessages] = useState([])
   const [micOn, setMicOn] = useState(false)
   const [participants, setParticipants] = useState([])
-  const [notificationSettings, setNotificationSettings] = useState({}) // { roomId: boolean }
+  const [notificationSettings, setNotificationSettings] = useState({})
   const channelRef = useRef(null)
-  const allRoomsChannelRef = useRef(null) // 모든 방의 메시지를 구독
+  const allRoomsChannelRef = useRef(null)
+  const [alertModal, setAlertModal] = useState({ open: false, title: '', message: '', errorCode: null })
 
-  // 버전 체크 및 강제 로그아웃 함수
-  const checkVersionAndLogout = () => {
+  const showAlert = useCallback((title, message, errorCode = null) => {
+    setAlertModal({ open: true, title, message, errorCode })
+  }, [])
+
+  const closeAlert = useCallback(() => {
+    setAlertModal({ open: false, title: '', message: '', errorCode: null })
+  }, [])
+
+  const checkVersionAndLogout = useCallback(() => {
     try {
-      // 채널 구독 해제 시도
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
         channelRef.current = null
@@ -73,7 +82,6 @@ const AppContent = () => {
     } catch (logoutError) {
       console.error('버전 변경으로 인한 로그아웃 처리 중 오류:', logoutError)
     } finally {
-      // 문제가 있어도 로컬 스토리지 강제 삭제 후 로그인 화면으로
       localStorage.removeItem('chatUser')
       localStorage.removeItem('appVersion')
       setEntered(false)
@@ -84,26 +92,30 @@ const AppContent = () => {
       setMicOn(false)
       setNotificationSettings({})
       setParticipants([])
+      setTimeout(() => {
+        try {
+          enqueueSnackbar('앱 버전이 업데이트되어 다시 로그인해야 합니다.', { variant: 'info' })
+        } catch (e) {
+          console.log('알림 표시 실패:', e)
+        }
+      }, 100)
     }
-  }
+  }, [enqueueSnackbar])
 
-  // 버전 체크 함수
-  const checkVersion = () => {
+  const checkVersion = useCallback(() => {
     const savedVersion = localStorage.getItem('appVersion')
     if (!savedVersion || savedVersion !== APP_VERSION) {
       checkVersionAndLogout()
       return false
     }
     return true
-  }
+  }, [checkVersionAndLogout])
 
-  // 앱 시작 시 로컬 스토리지에서 로그인 정보 & 버전 확인
   useEffect(() => {
     try {
       const savedUser = localStorage.getItem('chatUser')
       const savedVersion = localStorage.getItem('appVersion')
 
-      // 저장된 유저가 없으면 버전 정보도 정리
       if (!savedUser) {
         if (savedVersion && savedVersion !== APP_VERSION) {
           localStorage.removeItem('appVersion')
@@ -111,13 +123,11 @@ const AppContent = () => {
         return
       }
 
-      // 버전이 없거나 현재 버전과 다르면 강제 로그아웃 처리
       if (!savedVersion || savedVersion !== APP_VERSION) {
         checkVersionAndLogout()
         return
       }
 
-      // 버전이 일치하면 로그인 복원
       const userData = JSON.parse(savedUser)
       setUser(userData)
       setEntered(true)
@@ -126,9 +136,8 @@ const AppContent = () => {
       localStorage.removeItem('chatUser')
       localStorage.removeItem('appVersion')
     }
-  }, [])
+  }, [checkVersionAndLogout])
 
-  // 로그인 후 모든 방의 알림 설정 로드
   useEffect(() => {
     if (!entered || !user) return
 
@@ -153,11 +162,9 @@ const AppContent = () => {
     loadNotificationSettings()
   }, [entered, user])
 
-  // 모든 방의 메시지를 구독하여 알림 표시 (현재 방이 아닌 다른 방의 메시지)
   useEffect(() => {
     if (!entered || !user) return
 
-    // 참가 중인 모든 방 조회
     const setupAllRoomsSubscription = async () => {
       const { data: participantRooms, error } = await supabase
         .from('room_participants')
@@ -166,9 +173,6 @@ const AppContent = () => {
 
       if (error || !participantRooms) return
 
-      const roomIds = participantRooms.map((p) => p.room_id)
-
-      // 모든 방의 메시지 구독
       const channel = supabase
         .channel('all-rooms-messages')
         .on(
@@ -182,10 +186,8 @@ const AppContent = () => {
             const message = payload.new
             const roomId = message.room_id
 
-            // 현재 방의 메시지는 제외 (이미 화면에 표시됨)
             if (currentRoom && roomId === currentRoom.id) return
 
-            // 방 정보 조회
             const { data: roomData } = await supabase
               .from('rooms')
               .select('name')
@@ -194,14 +196,10 @@ const AppContent = () => {
 
             if (!roomData) return
 
-            // 맨션 확인
             const mentions = message.mentions || []
             const isMentioned = mentions.includes(user.nickname)
+            const notificationsEnabled = notificationSettings[roomId] !== false
 
-            // 알림 설정 확인
-            const notificationsEnabled = notificationSettings[roomId] !== false // 기본값은 true
-
-            // 맨션되었거나 알림이 켜져있으면 토스트 표시
             if (isMentioned || notificationsEnabled) {
               const messageText = isMentioned
                 ? `@${user.nickname} ${roomData.name}: ${message.user_name} - ${message.text}`
@@ -230,12 +228,10 @@ const AppContent = () => {
     }
   }, [entered, user, currentRoom, notificationSettings, enqueueSnackbar])
 
-  // 방 입장 시 기존 메시지 & 참가자 로드 및 실시간 구독 설정
   useEffect(() => {
     if (!entered || !currentRoom) return
 
     const loadRoomData = async () => {
-      // 기존 메시지 로드
       const [{ data: msgData, error: msgError }, { data: participantData, error: participantError }] =
         await Promise.all([
           supabase
@@ -260,6 +256,8 @@ const AppContent = () => {
             user: msg.user_name,
             text: msg.text,
             mentions: msg.mentions || [],
+            file_url: msg.file_url || null,
+            file_type: msg.file_type || null,
             created_at: msg.created_at,
           }))
         )
@@ -274,7 +272,6 @@ const AppContent = () => {
 
     loadRoomData()
 
-    // 실시간 구독 설정 (현재 방만)
     const channel = supabase
       .channel(`messages-room-${currentRoom.id}`)
       .on(
@@ -291,6 +288,8 @@ const AppContent = () => {
             user: payload.new.user_name,
             text: payload.new.text,
             mentions: payload.new.mentions || [],
+            file_url: payload.new.file_url || null,
+            file_type: payload.new.file_type || null,
             created_at: payload.new.created_at,
           }
           setMessages((prev) => [...prev, newMessage])
@@ -300,7 +299,6 @@ const AppContent = () => {
 
     channelRef.current = channel
 
-    // 정리 함수
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current)
@@ -309,23 +307,20 @@ const AppContent = () => {
     }
   }, [entered, currentRoom])
 
-  const handleAuthSuccess = (userData) => {
+  const handleAuthSuccess = useCallback((userData) => {
     setUser(userData)
     setEntered(true)
-    // 로컬 스토리지에 로그인 정보 저장
     localStorage.setItem('chatUser', JSON.stringify(userData))
     localStorage.setItem('appVersion', APP_VERSION)
-  }
+  }, [])
 
-  const handleSelectRoom = async (room) => {
+  const handleSelectRoom = useCallback(async (room) => {
     if (!user) return
 
-    // 버전 체크
     if (!checkVersion()) {
       return
     }
 
-    // 참가자 정보 upsert (이미 참가 중이면 유지)
     const role = room.creator_id === user.id ? 'creator' : 'member'
 
     const { error } = await supabase.from('room_participants').upsert(
@@ -342,24 +337,40 @@ const AppContent = () => {
 
     if (error) {
       console.error('방 참가 오류:', error)
-      alert('채팅방에 입장할 수 없습니다. 잠시 후 다시 시도해주세요.')
+      showAlert('채팅방 입장 실패', getErrorMessage(ERROR_CODES.ROOM_JOIN_FAILED), ERROR_CODES.ROOM_JOIN_FAILED)
       return
     }
 
     setCurrentRoom(room)
-  }
+  }, [user, checkVersion, showAlert])
 
-  const handleSendMessage = async () => {
-    if (!message.trim()) return
-    if (!user) return
-    if (!currentRoom) return
+  const handleLeaveRoom = useCallback(() => {
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+    setCurrentRoom(null)
+    setMessages([])
+    setMessage('')
+    setMicOn(false)
+    setParticipants([])
+  }, [])
 
-    // 버전 체크
-    if (!checkVersion()) {
+  const handleSendMessage = useCallback(async (fileUrl = null, fileType = null) => {
+    if (!message.trim() && !fileUrl) {
+      console.log('메시지 전송 실패: 메시지와 파일이 모두 비어있음')
+      return
+    }
+    if (!user || !currentRoom) {
+      console.log('메시지 전송 실패: 사용자 정보 또는 방 정보 없음')
       return
     }
 
-    // 방이 아직 존재하는지 확인
+    if (!checkVersion()) {
+      console.log('메시지 전송 실패: 버전 체크 실패')
+      return
+    }
+
     const { data: roomData, error: roomError } = await supabase
       .from('rooms')
       .select('id')
@@ -367,40 +378,113 @@ const AppContent = () => {
       .maybeSingle()
 
     if (roomError || !roomData) {
-      alert('이미 삭제된 방입니다. 리스트로 이동합니다.')
+      showAlert('채팅방 오류', '이미 삭제된 방입니다. 리스트로 이동합니다.', ERROR_CODES.ROOM_ALREADY_DELETED)
       handleLeaveRoom()
       return
     }
 
-    // 맨션 추출
     const mentions = parseMentions(message.trim())
-    // 참가자 목록에서 실제 존재하는 닉네임만 필터링
     const validMentions = mentions.filter((nickname) =>
       participants.some((p) => p.nickname === nickname)
     )
 
-    // Supabase에 메시지 저장
-    const { error } = await supabase.from('messages').insert({
-      room_id: currentRoom.id,
-      user_name: user.nickname,
-      text: message.trim(),
+    const messageData = {
+      room_id: Number(currentRoom.id),
+      user_name: String(user.nickname),
+      text: String(message.trim() || ''),
       mentions: validMentions.length > 0 ? validMentions : null,
-    })
+    }
 
-    if (error) {
-      console.error('메시지 전송 오류:', error)
-      // FK 제약 등으로 방이 이미 삭제된 경우를 대비
-      alert('이미 삭제된 방입니다. 리스트로 이동합니다.')
-      handleLeaveRoom()
+    if (fileUrl) {
+      messageData.file_url = String(fileUrl)
+      messageData.file_type = String(fileType)
+    }
+
+    try {
+      const { error } = await supabase.from('messages').insert(messageData)
+
+      if (error) {
+        console.error('메시지 전송 오류:', error)
+        
+        if (error.code === '23503' || error.message?.includes('foreign key')) {
+          showAlert('채팅방 오류', '이미 삭제된 방입니다. 리스트로 이동합니다.', ERROR_CODES.MESSAGE_FOREIGN_KEY_ERROR)
+          handleLeaveRoom()
+        } else {
+          showAlert('메시지 전송 실패', getErrorMessage(ERROR_CODES.MESSAGE_SEND_FAILED), ERROR_CODES.MESSAGE_SEND_FAILED)
+        }
+        return
+      }
+    } catch (err) {
+      console.error('메시지 전송 중 예외 발생:', err)
+      showAlert('메시지 전송 실패', getErrorMessage(ERROR_CODES.MESSAGE_SEND_FAILED), ERROR_CODES.MESSAGE_SEND_FAILED)
       return
     }
 
-    // 로컬 상태는 Realtime 구독으로 자동 업데이트됨
     setMessage('')
-  }
+    console.log('메시지 전송 성공')
+  }, [message, user, currentRoom, participants, checkVersion, showAlert, handleLeaveRoom])
 
-  // 알림 설정 토글
-  const handleToggleNotification = async (roomId, enabled) => {
+  const handleFileSelect = useCallback(async (file) => {
+    if (!user || !currentRoom) return
+
+    if (!checkVersion()) {
+      return
+    }
+
+    const isImage = file.type.startsWith('image/')
+    const isVideo = file.type.startsWith('video/')
+
+    if (!isImage && !isVideo) {
+      showAlert('파일 형식 오류', '이미지 또는 영상 파일만 업로드할 수 있습니다.', ERROR_CODES.FILE_INVALID_TYPE)
+      return
+    }
+
+    try {
+      const bucketName = 'chat-files'
+      const timestamp = Date.now()
+      const fileName = `${timestamp}_${file.name}`
+      const filePath = `${currentRoom.id}/${fileName}`
+
+      console.log('파일 업로드 시도:', { bucketName, filePath, fileName })
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from(bucketName)
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false,
+        })
+
+      if (uploadError) {
+        console.error('파일 업로드 오류:', uploadError)
+        
+        if (uploadError.message?.includes('Bucket not found') || uploadError.statusCode === '404') {
+          showAlert('파일 저장소 오류', getErrorMessage(ERROR_CODES.FILE_BUCKET_NOT_FOUND), ERROR_CODES.FILE_BUCKET_NOT_FOUND)
+        } else if (uploadError.statusCode === '403' || uploadError.message?.includes('permission')) {
+          showAlert('파일 업로드 권한 오류', getErrorMessage(ERROR_CODES.FILE_UPLOAD_PERMISSION_DENIED), ERROR_CODES.FILE_UPLOAD_PERMISSION_DENIED)
+        } else {
+          showAlert('파일 업로드 실패', getErrorMessage(ERROR_CODES.FILE_UPLOAD_FAILED), ERROR_CODES.FILE_UPLOAD_FAILED)
+        }
+        return
+      }
+      
+      console.log('파일 업로드 성공:', uploadData)
+
+      const { data: urlData } = supabase.storage.from(bucketName).getPublicUrl(filePath)
+
+      if (!urlData?.publicUrl) {
+        showAlert('파일 URL 오류', getErrorMessage(ERROR_CODES.FILE_URL_FETCH_FAILED), ERROR_CODES.FILE_URL_FETCH_FAILED)
+        return
+      }
+
+      const fileType = isImage ? 'image' : 'video'
+      await handleSendMessage(urlData.publicUrl, fileType)
+    } catch (error) {
+      console.error('파일 처리 오류:', error)
+      showAlert('파일 업로드 실패', getErrorMessage(ERROR_CODES.FILE_UPLOAD_FAILED), ERROR_CODES.FILE_UPLOAD_FAILED)
+    }
+  }, [user, currentRoom, checkVersion, handleSendMessage, showAlert])
+
+  const handleToggleNotification = useCallback(async (roomId, enabled) => {
     if (!user) return
 
     const { error } = await supabase.from('room_notification_settings').upsert(
@@ -424,25 +508,9 @@ const AppContent = () => {
       ...prev,
       [roomId]: enabled,
     }))
-  }
+  }, [user])
 
-  // 채팅방 나가기 (리스트로 돌아가기)
-  const handleLeaveRoom = () => {
-    // 구독 해제
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
-    }
-    setCurrentRoom(null)
-    setMessages([])
-    setMessage('')
-    setMicOn(false)
-    setParticipants([])
-  }
-
-  // 로그아웃
-  const handleLogout = () => {
-    // 구독 해제
+  const handleLogout = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
       channelRef.current = null
@@ -458,51 +526,65 @@ const AppContent = () => {
     setMessage('')
     setMicOn(false)
     setNotificationSettings({})
-    // 로컬 스토리지에서 로그인 정보 및 버전 정보 삭제
     localStorage.removeItem('chatUser')
     localStorage.removeItem('appVersion')
-  }
+  }, [])
+
+  const notificationToggleHandler = useMemo(() => {
+    if (!currentRoom) return () => {}
+    return () => handleToggleNotification(currentRoom.id, notificationSettings[currentRoom.id] === false)
+  }, [currentRoom, notificationSettings, handleToggleNotification])
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        height: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        background: 'radial-gradient(circle at top, #1f2937 0, #020617 55%, #000 100%)',
-        overflow: 'hidden',
-      }}
-    >
-      {!entered || !user ? (
-        <EnterScreen onAuthSuccess={handleAuthSuccess} />
-      ) : !currentRoom ? (
-        <RoomListScreen
-          user={user}
-          onSelectRoom={handleSelectRoom}
-          onLogout={handleLogout}
-          notificationSettings={notificationSettings}
-          onToggleNotification={handleToggleNotification}
-        />
-      ) : (
-        <ChatScreen
-          name={user.nickname}
-          room={currentRoom}
-          participants={participants}
-          messages={messages}
-          message={message}
-          micOn={micOn}
-          onToggleMic={() => setMicOn((prev) => !prev)}
-          onMessageChange={setMessage}
-          onSendMessage={handleSendMessage}
-          onLeave={handleLeaveRoom}
-          notificationEnabled={notificationSettings[currentRoom.id] !== false}
-          onToggleNotification={() =>
-            handleToggleNotification(currentRoom.id, notificationSettings[currentRoom.id] === false)
-          }
-        />
-      )}
-    </Box>
+    <>
+      <AlertModal
+        open={alertModal.open}
+        onClose={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        errorCode={alertModal.errorCode}
+      />
+      <Box
+        sx={{
+          minHeight: '100vh',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'radial-gradient(circle at top, #1f2937 0, #020617 55%, #000 100%)',
+          overflow: 'hidden',
+        }}
+      >
+        {!entered || !user ? (
+          <EnterScreen onAuthSuccess={handleAuthSuccess} showAlert={showAlert} />
+        ) : !currentRoom ? (
+          <RoomListScreen
+            user={user}
+            onSelectRoom={handleSelectRoom}
+            onLogout={handleLogout}
+            notificationSettings={notificationSettings}
+            onToggleNotification={handleToggleNotification}
+            showAlert={showAlert}
+          />
+        ) : (
+          <ChatScreen
+            name={user.nickname}
+            room={currentRoom}
+            participants={participants}
+            messages={messages}
+            message={message}
+            micOn={micOn}
+            onToggleMic={() => setMicOn((prev) => !prev)}
+            onMessageChange={setMessage}
+            onSendMessage={handleSendMessage}
+            onFileSelect={handleFileSelect}
+            onLeave={handleLeaveRoom}
+            notificationEnabled={notificationSettings[currentRoom.id] !== false}
+            onToggleNotification={notificationToggleHandler}
+            showAlert={showAlert}
+          />
+        )}
+      </Box>
+    </>
   )
 }
 
@@ -510,10 +592,28 @@ const App = () => {
   return (
     <ThemeProvider theme={darkTheme}>
       <CssBaseline />
+      <GlobalStyles
+        styles={{
+          '.SnackbarContainer-root': {
+            zIndex: '9999 !important',
+          },
+          '.SnackbarContent-root': {
+            zIndex: '9999 !important',
+          },
+          '[class*="SnackbarContainer"]': {
+            zIndex: '9999 !important',
+          },
+          '[class*="SnackbarContent"]': {
+            zIndex: '9999 !important',
+          },
+        }}
+      />
       <SnackbarProvider
         maxSnack={3}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         autoHideDuration={3000}
+        dense={false}
+        preventDuplicate={true}
       >
         <AppContent />
       </SnackbarProvider>

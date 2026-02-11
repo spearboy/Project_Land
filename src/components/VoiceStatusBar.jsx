@@ -41,4 +41,3 @@ const VoiceStatusBar = ({ micOn }) => {
 }
 
 export default VoiceStatusBar
-

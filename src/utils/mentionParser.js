@@ -1,56 +1,112 @@
-// 맨션 파싱 유틸리티
-// @닉네임 형식의 맨션을 추출
-
 export const parseMentions = (text) => {
-  // @닉네임 패턴 매칭 (띄어쓰기 전까지)
   const mentionRegex = /@(\S+)/g
   const mentions = []
   let match
 
   while ((match = mentionRegex.exec(text)) !== null) {
-    mentions.push(match[1]) // 닉네임만 추출
+    mentions.push(match[1])
   }
 
-  return [...new Set(mentions)] // 중복 제거
+  return [...new Set(mentions)]
 }
 
 export const formatMessageWithMentions = (text, participants) => {
-  // 맨션된 닉네임을 찾아서 하이라이트
-  const mentionRegex = /@(\S+)/g
-  const parts = []
-  let lastIndex = 0
-  let match
-
-  while ((match = mentionRegex.exec(text)) !== null) {
-    // 맨션 전 텍스트
-    if (match.index > lastIndex) {
-      parts.push({
-        type: 'text',
-        content: text.substring(lastIndex, match.index),
+  if (!text) return [{ type: 'text', content: '' }]
+  
+  const lines = text.split('\n')
+  const allParts = []
+  
+  lines.forEach((line, lineIndex) => {
+    const mentionRegex = /@(\S+)/g
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi
+    const parts = []
+    let lastIndex = 0
+    
+    const matches = []
+    let match
+    
+    while ((match = mentionRegex.exec(line)) !== null) {
+      matches.push({
+        type: 'mention',
+        index: match.index,
+        length: match[0].length,
+        content: match[0],
+        nickname: match[1],
       })
     }
-
-    // 맨션된 닉네임이 참가자 목록에 있는지 확인
-    const mentionedNickname = match[1]
-    const isParticipant = participants.some((p) => p.nickname === mentionedNickname)
-
-    parts.push({
-      type: 'mention',
-      content: `@${mentionedNickname}`,
-      nickname: mentionedNickname,
-      isValid: isParticipant,
+    
+    urlRegex.lastIndex = 0
+    while ((match = urlRegex.exec(line)) !== null) {
+      matches.push({
+        type: 'link',
+        index: match.index,
+        length: match[0].length,
+        content: match[0],
+        url: match[0].startsWith('www.') ? 'https://' + match[0] : match[0],
+      })
+    }
+    
+    matches.sort((a, b) => a.index - b.index)
+    
+    const filteredMatches = []
+    let currentEnd = 0
+    matches.forEach((m) => {
+      if (m.index >= currentEnd) {
+        filteredMatches.push(m)
+        currentEnd = m.index + m.length
+      }
     })
-
-    lastIndex = match.index + match[0].length
-  }
-
-  // 마지막 텍스트
-  if (lastIndex < text.length) {
-    parts.push({
-      type: 'text',
-      content: text.substring(lastIndex),
+    
+    filteredMatches.forEach((m) => {
+      if (m.index > lastIndex) {
+        parts.push({
+          type: 'text',
+          content: line.substring(lastIndex, m.index),
+        })
+      }
+      
+      if (m.type === 'mention') {
+        const isParticipant = participants.some((p) => p.nickname === m.nickname)
+        parts.push({
+          type: 'mention',
+          content: m.content,
+          nickname: m.nickname,
+          isValid: isParticipant,
+        })
+      } else if (m.type === 'link') {
+        parts.push({
+          type: 'link',
+          content: m.content,
+          url: m.url,
+        })
+      }
+      
+      lastIndex = m.index + m.length
     })
-  }
-
-  return parts.length > 0 ? parts : [{ type: 'text', content: text }]
+    
+    if (lastIndex < line.length) {
+      parts.push({
+        type: 'text',
+        content: line.substring(lastIndex),
+      })
+    }
+    
+    if (parts.length === 0) {
+      parts.push({
+        type: 'text',
+        content: line,
+      })
+    }
+    
+    allParts.push(...parts)
+    
+    if (lineIndex < lines.length - 1) {
+      allParts.push({
+        type: 'linebreak',
+        content: '\n',
+      })
+    }
+  })
+  
+  return allParts.length > 0 ? allParts : [{ type: 'text', content: text }]
 }

@@ -1,6 +1,5 @@
 import React from 'react'
 import { AppBar, Toolbar, Box, Typography, IconButton, Chip, Button } from '@mui/material'
-import MicIcon from '@mui/icons-material/Mic'
 import MicOffIcon from '@mui/icons-material/MicOff'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
 import NotificationsIcon from '@mui/icons-material/Notifications'
@@ -109,4 +108,3 @@ const ChatHeader = ({
 }
 
 export default ChatHeader
-

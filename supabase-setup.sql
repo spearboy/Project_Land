@@ -78,6 +78,28 @@ BEGIN
   END IF;
 END $$;
 
+-- messages 테이블에 file_url 컬럼 추가 (파일 URL)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'messages' AND column_name = 'file_url'
+  ) THEN
+    ALTER TABLE messages ADD COLUMN file_url TEXT;
+  END IF;
+END $$;
+
+-- messages 테이블에 file_type 컬럼 추가 (파일 타입: 'image' 또는 'video')
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'messages' AND column_name = 'file_type'
+  ) THEN
+    ALTER TABLE messages ADD COLUMN file_type TEXT;
+  END IF;
+END $$;
+
 -- 실시간 기능 활성화 (Realtime) - 이미 추가된 테이블은 스킵
 DO $$
 BEGIN
@@ -270,3 +292,22 @@ BEGIN
       WITH CHECK (true);
   END IF;
 END $$;
+
+-- Supabase Storage 버킷 생성 (파일 업로드용)
+-- Storage > Buckets에서 수동으로 생성하거나 아래 SQL 실행
+-- 주의: Storage 버킷은 SQL로 직접 생성할 수 없으므로 Supabase Dashboard에서 수동 생성 필요
+-- 버킷 이름: chat-files
+-- Public: true (공개 접근 허용)
+-- File size limit: 적절한 크기 설정 (예: 10MB)
+-- Allowed MIME types: image/*, video/*
+
+-- Storage 정책 설정 (RLS)
+-- Storage > Policies에서 다음 정책 추가:
+-- 1. SELECT 정책: "모든 사용자가 파일 읽기 가능"
+--    - Policy name: "모든 사용자가 파일 읽기 가능"
+--    - Allowed operation: SELECT
+--    - Policy definition: true
+-- 2. INSERT 정책: "모든 사용자가 파일 업로드 가능"
+--    - Policy name: "모든 사용자가 파일 업로드 가능"
+--    - Allowed operation: INSERT
+--    - Policy definition: true

@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { Box } from '@mui/material'
 import ChatHeader from './ChatHeader'
 import MessageList from './MessageList'
@@ -16,13 +16,15 @@ const ChatScreen = ({
   onToggleMic,
   onMessageChange,
   onSendMessage,
+  onFileSelect,
   onLeave,
   notificationEnabled,
   onToggleNotification,
+  showAlert,
 }) => {
   const [openParticipants, setOpenParticipants] = useState(false)
 
-  const participantsCount = participants?.length || (room ? 1 : 0)
+  const participantsCount = useMemo(() => participants?.length || (room ? 1 : 0), [participants, room])
 
   return (
     <>
@@ -50,7 +52,13 @@ const ChatScreen = ({
       </Box>
 
       <VoiceStatusBar micOn={micOn} />
-      <MessageInput message={message} onChange={onMessageChange} onSend={onSendMessage} />
+      <MessageInput
+        message={message}
+        onChange={onMessageChange}
+        onSend={onSendMessage}
+        onFileSelect={onFileSelect}
+        showAlert={showAlert}
+      />
 
       <RoomParticipantsModal
         open={openParticipants}
@@ -64,4 +72,3 @@ const ChatScreen = ({
 }
 
 export default ChatScreen
-

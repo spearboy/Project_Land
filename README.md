@@ -5,6 +5,9 @@
 ## 기능
 
 - ✅ 실시간 텍스트 채팅 (Supabase Realtime)
+- 📎 파일 첨부 (이미지/영상만, 다운로드 방지)
+- 🔗 링크 자동 감지 및 새창 열기
+- 📝 줄바꿈 유지 (엔터로 작성한 그대로 표시)
 - 🎤 음성 채팅 UI (준비됨)
 - 📱 모바일 최적화 UI (MUI 다크 테마)
 - 🚀 Vercel 배포 지원
@@ -31,36 +34,27 @@ npm install
 
 Supabase Dashboard > SQL Editor에서 `supabase-setup.sql` 파일의 내용을 실행하세요.
 
-또는 직접 실행:
+#### 2-3. Storage 버킷 생성 (파일 첨부 기능용)
 
-```sql
--- messages 테이블 생성
-CREATE TABLE IF NOT EXISTS messages (
-  id BIGSERIAL PRIMARY KEY,
-  user_name TEXT NOT NULL,
-  text TEXT NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
+1. Supabase Dashboard > Storage로 이동
+2. "New bucket" 클릭
+3. 버킷 설정:
+   - **Name**: `chat-files`
+   - **Public bucket**: ✅ 체크 (공개 접근 허용)
+   - **File size limit**: 적절한 크기 설정 (예: 10MB)
+   - **Allowed MIME types**: `image/*, video/*`
+4. "Create bucket" 클릭
+5. Storage > Policies에서 다음 정책 추가:
+   - **SELECT 정책**:
+     - Policy name: "모든 사용자가 파일 읽기 가능"
+     - Allowed operation: SELECT
+     - Policy definition: `true`
+   - **INSERT 정책**:
+     - Policy name: "모든 사용자가 파일 업로드 가능"
+     - Allowed operation: INSERT
+     - Policy definition: `true`
 
--- 실시간 기능 활성화
-ALTER PUBLICATION supabase_realtime ADD TABLE messages;
-
--- 인덱스 추가
-CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at DESC);
-
--- RLS 정책 설정
-ALTER TABLE messages ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "모든 사용자가 메시지 읽기 가능"
-  ON messages FOR SELECT
-  USING (true);
-
-CREATE POLICY "모든 사용자가 메시지 작성 가능"
-  ON messages FOR INSERT
-  WITH CHECK (true);
-```
-
-#### 2-3. 환경 변수 설정
+#### 2-4. 환경 변수 설정
 
 프로젝트 루트에 `.env` 파일을 생성하고 다음 내용을 추가하세요:
 
@@ -108,11 +102,74 @@ src/
 ├── App.jsx              # 메인 앱 컴포넌트 (상태 관리, Supabase 연결)
 ├── lib/
 │   └── supabase.js      # Supabase 클라이언트 설정
+├── constants/
+│   └── errorCodes.js    # 에러 코드 상수
 └── components/
     ├── EnterScreen.jsx  # 입장 화면
     ├── ChatScreen.jsx   # 채팅 화면 컨테이너
     ├── ChatHeader.jsx   # 상단 헤더
     ├── MessageList.jsx  # 메시지 목록
     ├── MessageInput.jsx # 메시지 입력창
-    └── VoiceStatusBar.jsx # 음성 채팅 상태 표시
+    ├── VoiceStatusBar.jsx # 음성 채팅 상태 표시
+    ├── AlertModal.jsx   # 알림 모달
+    ├── ConfirmModal.jsx # 확인 모달
+    └── PromptModal.jsx  # 입력 모달
 ```
+
+## 에러 코드
+
+애플리케이션에서 발생하는 오류는 에러 코드로 관리됩니다. 오류 발생 시 에러 코드와 함께 관리자에게 문의해주세요.
+
+### 인증 관련 (10001-10010)
+
+- **10001**: 로그인 실패
+- **10002**: 회원가입 실패
+- **10003**: 비밀번호 재설정 실패
+- **10004**: 사용자 정보를 찾을 수 없음
+- **10005**: 잘못된 인증 정보
+- **10006**: 중복된 사용자 아이디
+- **10007**: 중복된 닉네임
+
+### 채팅방 관련 (10011-10020)
+
+- **10011**: 채팅방 목록 로드 실패
+- **10012**: 채팅방 생성 실패
+- **10013**: 채팅방 삭제 실패
+- **10014**: 채팅방 입장 실패
+- **10015**: 채팅방을 찾을 수 없음
+- **10016**: 이미 삭제된 채팅방
+- **10017**: 잘못된 초대코드
+
+### 메시지 관련 (10021-10030)
+
+- **10021**: 메시지 전송 실패
+- **10022**: 메시지 로드 실패
+- **10023**: 메시지 외래키 오류 (삭제된 방 참조)
+
+### 파일 관련 (10031-10040)
+
+- **10031**: 파일 업로드 실패
+- **10032**: 파일 저장소를 찾을 수 없음
+- **10033**: 파일 업로드 권한 없음
+- **10034**: 잘못된 파일 형식
+- **10035**: 파일 URL 가져오기 실패
+
+### 알림 설정 관련 (10041-10050)
+
+- **10041**: 알림 설정 로드 실패
+- **10042**: 알림 설정 업데이트 실패
+
+### 참가자 관련 (10051-10060)
+
+- **10051**: 참가자 목록 로드 실패
+- **10052**: 참가자 추가 실패
+
+### 버전 관련 (10061-10070)
+
+- **10061**: 앱 버전 불일치
+- **10062**: 버전 확인 실패
+
+### 네트워크 관련 (10071-10099)
+
+- **10071**: 네트워크 오류
+- **10099**: 알 수 없는 오류
