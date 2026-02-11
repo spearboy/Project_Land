@@ -11,7 +11,7 @@ import { parseMentions } from './utils/mentionParser'
 import { ERROR_CODES, getErrorMessage } from './constants/errorCodes'
 import generateSummary from './utils/aiSummary'
 
-const APP_VERSION = 'v1.0.0'
+const APP_VERSION = 'v1.0.1'
 
 const darkTheme = createTheme({
   palette: {
