@@ -4,6 +4,7 @@ import MicOffIcon from '@mui/icons-material/MicOff'
 import ExitToAppIcon from '@mui/icons-material/ExitToApp'
 import NotificationsIcon from '@mui/icons-material/Notifications'
 import NotificationsOffIcon from '@mui/icons-material/NotificationsOff'
+import SummarizeIcon from '@mui/icons-material/Summarize'
 
 const ChatHeader = ({
   name,
@@ -15,6 +16,7 @@ const ChatHeader = ({
   onOpenParticipants,
   notificationEnabled,
   onToggleNotification,
+  onOpenSummary,
 }) => {
   return (
     <AppBar
@@ -79,6 +81,16 @@ const ChatHeader = ({
             }}
           >
             {notificationEnabled ? <NotificationsIcon /> : <NotificationsOffIcon />}
+          </IconButton>
+          <IconButton
+            color="default"
+            onClick={onOpenSummary}
+            title="채팅방 요약"
+            sx={{
+              backgroundColor: 'transparent',
+            }}
+          >
+            <SummarizeIcon />
           </IconButton>
           <IconButton
             color="default"

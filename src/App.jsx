@@ -5,9 +5,11 @@ import EnterScreen from './components/EnterScreen'
 import ChatScreen from './components/ChatScreen'
 import RoomListScreen from './components/RoomListScreen'
 import AlertModal from './components/AlertModal'
+import SummaryModal from './components/SummaryModal'
 import { supabase } from './lib/supabase'
 import { parseMentions } from './utils/mentionParser'
 import { ERROR_CODES, getErrorMessage } from './constants/errorCodes'
+import generateSummary from './utils/aiSummary'
 
 const APP_VERSION = 'v1.0.0'
 
@@ -60,6 +62,7 @@ const AppContent = () => {
   const channelRef = useRef(null)
   const allRoomsChannelRef = useRef(null)
   const [alertModal, setAlertModal] = useState({ open: false, title: '', message: '', errorCode: null })
+  const [summaryModal, setSummaryModal] = useState({ open: false, summary: '', loading: false, error: null })
 
   const showAlert = useCallback((title, message, errorCode = null) => {
     setAlertModal({ open: true, title, message, errorCode })
@@ -282,7 +285,7 @@ const AppContent = () => {
           table: 'messages',
           filter: `room_id=eq.${currentRoom.id}`,
         },
-        (payload) => {
+        async (payload) => {
           const newMessage = {
             id: payload.new.id,
             user: payload.new.user_name,
@@ -510,6 +513,32 @@ const AppContent = () => {
     }))
   }, [user])
 
+  const handleOpenSummary = useCallback(async () => {
+    if (!currentRoom || !messages.length) {
+      showAlert('요약 불가', '요약할 메시지가 없습니다.', ERROR_CODES.UNKNOWN_ERROR)
+      return
+    }
+
+    setSummaryModal({ open: true, summary: '', loading: true, error: null })
+
+    try {
+      const summary = await generateSummary(messages, currentRoom.name)
+      setSummaryModal({ open: true, summary, loading: false, error: null })
+    } catch (error) {
+      console.error('요약 생성 오류:', error)
+      setSummaryModal({
+        open: true,
+        summary: '',
+        loading: false,
+        error: error.message || getErrorMessage(ERROR_CODES.AI_RESPONSE_FAILED),
+      })
+    }
+  }, [currentRoom, messages, showAlert])
+
+  const handleCloseSummary = useCallback(() => {
+    setSummaryModal({ open: false, summary: '', loading: false, error: null })
+  }, [])
+
   const handleLogout = useCallback(() => {
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
@@ -580,10 +609,27 @@ const AppContent = () => {
             onLeave={handleLeaveRoom}
             notificationEnabled={notificationSettings[currentRoom.id] !== false}
             onToggleNotification={notificationToggleHandler}
+            onOpenSummary={handleOpenSummary}
             showAlert={showAlert}
           />
         )}
       </Box>
+
+      <AlertModal
+        open={alertModal.open}
+        title={alertModal.title}
+        message={alertModal.message}
+        errorCode={alertModal.errorCode}
+        onClose={closeAlert}
+      />
+
+      <SummaryModal
+        open={summaryModal.open}
+        summary={summaryModal.summary}
+        loading={summaryModal.loading}
+        error={summaryModal.error}
+        onClose={handleCloseSummary}
+      />
     </>
   )
 }

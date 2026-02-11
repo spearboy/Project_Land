@@ -20,6 +20,7 @@ const ChatScreen = ({
   onLeave,
   notificationEnabled,
   onToggleNotification,
+  onOpenSummary,
   showAlert,
 }) => {
   const [openParticipants, setOpenParticipants] = useState(false)
@@ -38,6 +39,7 @@ const ChatScreen = ({
         onOpenParticipants={() => setOpenParticipants(true)}
         notificationEnabled={notificationEnabled}
         onToggleNotification={onToggleNotification}
+        onOpenSummary={onOpenSummary}
       />
 
       <Box

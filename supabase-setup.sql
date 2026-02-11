@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS rooms (
   creator_nickname TEXT NOT NULL,
   is_private BOOLEAN NOT NULL DEFAULT FALSE,
   invite_code TEXT,
+  ai_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -97,6 +98,17 @@ BEGIN
     WHERE table_name = 'messages' AND column_name = 'file_type'
   ) THEN
     ALTER TABLE messages ADD COLUMN file_type TEXT;
+  END IF;
+END $$;
+
+-- rooms 테이블에 ai_enabled 컬럼 추가
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'rooms' AND column_name = 'ai_enabled'
+  ) THEN
+    ALTER TABLE rooms ADD COLUMN ai_enabled BOOLEAN NOT NULL DEFAULT FALSE;
   END IF;
 END $$;
 

@@ -301,19 +301,19 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout, notificationSettings, on
               }
               label="비밀방으로 만들기"
             />
-            {isPrivate && (
-              <Box sx={{ textAlign: 'right' }}>
-                <Typography variant="caption" color="text.secondary">
-                  초대코드
-                </Typography>
-                <Typography variant="body2" fontWeight={600}>
-                  {inviteCode}
-                </Typography>
-              </Box>
-            )}
-          </Box>
+          {isPrivate && (
+            <Box sx={{ textAlign: 'right' }}>
+              <Typography variant="caption" color="text.secondary">
+                초대코드
+              </Typography>
+              <Typography variant="body2" fontWeight={600}>
+                {inviteCode}
+              </Typography>
+            </Box>
+          )}
+        </Box>
 
-          <Divider sx={{ my: 1.5 }} />
+        <Divider sx={{ my: 1.5 }} />
 
           <Box
             sx={{
@@ -341,9 +341,9 @@ const RoomListScreen = ({ user, onSelectRoom, onLogout, notificationSettings, on
                 {rooms.map((room) => (
                   <ListItem
                     key={room.id}
-                    button
                     onClick={() => handleRoomClick(room)}
                     sx={{
+                      cursor: 'pointer',
                       '&:hover': {
                         backgroundColor: 'rgba(148,163,184,0.08)',
                       },

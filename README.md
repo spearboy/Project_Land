@@ -5,6 +5,7 @@
 ## 기능
 
 - ✅ 실시간 텍스트 채팅 (Supabase Realtime)
+- 🤖 AI 챗봇 (OpenAI GPT, 비공개방 전용)
 - 📎 파일 첨부 (이미지/영상만, 다운로드 방지)
 - 🔗 링크 자동 감지 및 새창 열기
 - 📝 줄바꿈 유지 (엔터로 작성한 그대로 표시)
@@ -61,10 +62,14 @@ Supabase Dashboard > SQL Editor에서 `supabase-setup.sql` 파일의 내용을 �
 ```env
 VITE_SUPABASE_URL=your_supabase_project_url
 VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
+VITE_GEMINI_API_KEY=your_gemini_api_key
 ```
 
 **Vercel 배포 시:**
-Vercel Dashboard > 프로젝트 설정 > Environment Variables에서 위 두 변수를 추가하세요.
+Vercel Dashboard > 프로젝트 설정 > Environment Variables에서 위 세 변수를 추가하세요.
+
+**⚠️ 보안 주의사항:**
+API 키는 클라이언트에 노출되므로, 프로덕션 환경에서는 서버 사이드 API를 통해 호출하는 것을 권장합니다.
 
 ### 3. 개발 서버 실행
 
@@ -93,7 +98,30 @@ npm run build
 - **React** + **Vite**
 - **Material-UI (MUI)** - 다크 테마
 - **Supabase** - 실시간 데이터베이스 및 Realtime
+- **Google Gemini** - AI 챗봇 (비공개방 전용, 무료 티어 제공)
 - **Vercel** - 배포 플랫폼
+
+## AI 챗봇 설정
+
+### Google Gemini API 키 발급 (무료)
+
+1. [Google AI Studio](https://makersuite.google.com/app/apikey)에 접속
+2. Google 계정으로 로그인
+3. "Create API Key" 클릭하여 새 API 키 생성
+4. 생성된 키를 `.env` 파일의 `VITE_GEMINI_API_KEY`에 추가
+
+**Gemini 무료 티어:**
+- 분당 60회 요청 (RPM)
+- 일일 무료 사용량 제공
+- 유료 플랜 없이도 사용 가능
+
+### 사용 방법
+
+1. 채팅방 생성 시 "비밀방으로 만들기" 체크
+2. "AI 챗봇 활성화" 토글 켜기
+3. 비공개방에서 메시지를 보내면 AI가 자동으로 응답
+
+**참고:** API 키가 없어도 기본 응답으로 동작하지만, 실제 AI 기능을 사용하려면 Gemini API 키가 필요합니다.
 
 ## 프로젝트 구조
 
@@ -168,6 +196,12 @@ src/
 
 - **10061**: 앱 버전 불일치
 - **10062**: 버전 확인 실패
+
+### AI 관련 (10081-10090)
+
+- **10081**: AI 응답 생성 실패
+- **10082**: AI API 키 없음
+- **10083**: AI API 오류
 
 ### 네트워크 관련 (10071-10099)
 
